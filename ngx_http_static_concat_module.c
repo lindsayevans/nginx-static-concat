@@ -105,13 +105,13 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	// Remove / from front of requested URI
 	requested_path = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(ngx_str_t));
 	size_t len = (size_t) r->uri.len;
-
 	size_t i;
 	for(i = 1; i < len; i++){
 	    requested_path[i-1] = r->uri.data[i];
 	}
 
 	// Check for invalid characters in requested path
+	// TODO: any escaped chars?
 	if(ngx_strchr(requested_path, '/')){
 	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Invalid char found in requested path: %s at: %i", requested_path, ngx_strchr(requested_path, '/'));
 	    return NGX_DECLINED;
@@ -152,7 +152,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	    if(i == r->uri.len || r->uri.data[i] == '+'){
 
 		// Append ".js" if not there
-		// TODO: this is JSCDN specific, need to make a config var or something
+		// TODO: this is JSCDN specific, need to make a config var or something - work out from last three chars of URI?
 		if(!(
 		    files[ii][jj-3] == '.' &&
 		    files[ii][jj-2] == 'j' &&
@@ -162,10 +162,10 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 		    files[ii][jj++] = 'j';
 		    files[ii][jj++] = 's';
 		}
+
 		files[ii][jj++] = '\0';
 		ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Added file to stack: %s", files[ii]);
 
-		//free(files[ii]);
 		ii++;
 		files[ii] = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(u_char *));    
 		jj = 0;
@@ -179,8 +179,10 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	}
 
 	// Loop over requested files & add to cat command
+	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
+	// sanitised or concat in code
 	ngx_str_t cmd;
-	cmd.data = ngx_pcalloc(r->pool, 1024); // TODO: figure size out (3 + (1+root.length)*ii + r->uri.length)
+	cmd.data = ngx_pcalloc(r->pool, 1024); // TODO: figure size out (3 + (1+root.length)*ii + 3 + r->uri.length)
 	cmd.len = ngx_sprintf(cmd.data, "cat") - cmd.data;
 
 	for(i = 0; i < ii; i++){
@@ -204,9 +206,10 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	free(files[ii]);
 
 	// TODO: fopen(path.data), filesize into content_length_n, content into buffer
-	// TODO: write path.data to concat log
+	// TODO: write path.data to concat log - log file should be a config var
 	// TODO: write headers file (use macros so only if static headers module included)
 
+	// Or we just doa subrequest?
 
 	// Set headers
         r->headers_out.status = NGX_HTTP_OK;
@@ -215,6 +218,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	r->headers_out.content_type.data = (u_char *) "text/plain";
 	ngx_http_send_header(r);
 
+	// Allocate response buffer
 	b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
 	if (b == NULL) {
 	    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, 
