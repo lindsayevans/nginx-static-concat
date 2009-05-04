@@ -1,0 +1,28 @@
+Nginx static_concat module 
+An Nginx module to concatenate static files together
+
+WARNING:
+This code WILL eat your cat, crash your server and send your bank details to random Nigerian email addresses. Run at your own risk.
+It is also potentially VERY UNSECURE at this point in time. Do not use it on any system exposed to the intertrons unless you like getting your server haX0red by russian zombie bikers.
+
+Compiling into Nginx:
+./configure --add-module=/path/to/nginx-static-concat-module
+
+Configuration:
+In your nginx.conf:
+
+  location / {
+    static_concat on;
+  }
+
+Example:
+Let's say you have /bacon & /chocolate already, now if somebody requests /bacon+chocolate, they will be concatenated together (in that order) and written to disk as bacon+chocolate, so that the next time /bacon+chocolate is requested, it will be served up piping hot form the filesystem. Hooray!
+
+
+TODO:
+ - Test the living daylights out of it for security holes.
+ - Logging what was concatenated when (so you can keep tabs & pre-concat in future).
+ - Support for extensions other than .js
+ - The ability to turn it off (why you would want to is anyones guess).
+ - Actually returning the file in the initial request.
+ - All sorts of other crap. Look through the source if you're interested. 
