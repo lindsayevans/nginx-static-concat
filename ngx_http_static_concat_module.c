@@ -144,7 +144,8 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	//}
 
 	// Split requested URI into component file names & attach '.js' if needed
-	u_char *files[10]; // 10 = max files to concat, TODO: make config var or something
+	u_int max_files = 10; // max files to concat, TODO: make config var or something
+	u_char *files[max_files];
 	u_int ii = 0, jj = 0;
 	files[ii] = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(u_char *));
 	for(i = 1; i < r->uri.len + 1; i++){
@@ -169,8 +170,9 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 		ii++;
 		files[ii] = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(u_char *));    
 		jj = 0;
-		if(ii > 10){
-		    break; // TODO: log error
+		if(ii > max_files){
+		    ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "Maximum number of %i fiels reached: %V", max_files, &r->uri);
+		    break;
 		}
 		continue;
 	    }
@@ -182,7 +184,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
 	// sanitised or concat in code
 	ngx_str_t cmd;
-	cmd.data = ngx_pcalloc(r->pool, 1024); // TODO: figure size out (3 + (1+root.length)*ii + 3 + r->uri.length)
+	cmd.data = ngx_pcalloc(r->pool, (3 + (1+ngx_strlen(&clcf->root))*ii + 3 + ngx_strlen(&r->uri)));
 	cmd.len = ngx_sprintf(cmd.data, "cat") - cmd.data;
 
 	for(i = 0; i < ii; i++){
@@ -205,42 +207,15 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 	free(files[ii]);
 
-	// TODO: fopen(path.data), filesize into content_length_n, content into buffer
 	// TODO: write path.data to concat log - log file should be a config var
 	// TODO: write headers file (use macros so only if static headers module included)
 
 	// Or we just doa subrequest?
-
-	// Set headers
-        r->headers_out.status = NGX_HTTP_OK;
-	r->headers_out.content_length_n = 100; // TODO: Size of concatted file
-	r->headers_out.content_type.len = sizeof("text/plain") - 1; //TODO: do we even need this?
-	r->headers_out.content_type.data = (u_char *) "text/plain";
-	ngx_http_send_header(r);
-
-	// Allocate response buffer
-	b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
-	if (b == NULL) {
-	    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, 
-		"Failed to allocate response buffer.");
-	    return NGX_HTTP_INTERNAL_SERVER_ERROR;
-	}
-
-	// TODO: read in concatted file & stuff into buffer
-	b->pos = (u_char *) "<!-- Served by Nginx -->";; /* first position in memory of the data */
-	b->last = b->pos + sizeof("<!-- Served by Nginx -->") - 1; /* last position */
-
-	b->memory = 1; /* content is in read-only memory */
-	/* (i.e., filters should copy it rather than rewrite in place) */
-
-	b->last_buf = 1; /* there will be no more buffers in the request */
-
-	out.buf = b;
-	out.next = NULL;
+	return ngx_http_subrequest(r, &r->uri, NULL /* args */, NULL /* callback */, NULL, 0 /* flags */);
 
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, &out); // Do we ever get here?
 
 }
 
