@@ -171,7 +171,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 		files[ii] = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(u_char *));    
 		jj = 0;
 		if(ii > max_files){
-		    ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "Maximum number of %i fiels reached: %V", max_files, &r->uri);
+		    ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "Maximum number of %i files reached: %V", max_files, &r->uri);
 		    break;
 		}
 		continue;
@@ -184,7 +184,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
 	// sanitised or concat in code
 	ngx_str_t cmd;
-	cmd.data = ngx_pcalloc(r->pool, (3 + (1+ngx_strlen(&clcf->root))*ii + 3 + ngx_strlen(&r->uri)));
+	cmd.data = ngx_pcalloc(r->pool, (3 + (1 + ngx_strlen(&clcf->root)) * ii + 3 + ngx_strlen(&r->uri)));
 	cmd.len = ngx_sprintf(cmd.data, "cat") - cmd.data;
 
 	for(i = 0; i < ii; i++){
@@ -210,7 +210,8 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	// TODO: write path.data to concat log - log file should be a config var
 	// TODO: write headers file (use macros so only if static headers module included)
 
-	// Or we just doa subrequest?
+	// Subrequest for cncatted file
+	// TODO: will this be a different URI if we skip non-existent? (bad idea, I think)
 	return ngx_http_subrequest(r, &r->uri, NULL /* args */, NULL /* callback */, NULL, 0 /* flags */);
 
     }
