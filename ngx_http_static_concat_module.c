@@ -109,6 +109,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	for(i = 1; i < len; i++){
 	    requested_path[i-1] = r->uri.data[i];
 	}
+	requested_path[i] = '\0';
 
 	// Check for invalid characters in requested path
 	// TODO: any escaped chars?
@@ -116,7 +117,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Invalid char found in requested path: %s at: %i", requested_path, ngx_strchr(requested_path, '/'));
 	    return NGX_DECLINED;
 	}
-	free(requested_path);
+	//free(requested_path);
 
 	// Check if file exists etc.
 	// TODO: probably more efficient to use stat() or access() here
@@ -154,6 +155,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 		// Append ".js" if not there
 		// TODO: this is JSCDN specific, need to make a config var or something - work out from last three chars of URI?
+		// TODO: this is causing bugs, fix
 		if(!(
 		    files[ii][jj-3] == '.' &&
 		    files[ii][jj-2] == 'j' &&
@@ -218,7 +220,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 		ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Logging concatted file: %s", requested_path);
 
 		FILE* concat_log;
-		concat_log = fopen((char *) "/usr/local/nginx/logs/concat.log", "a+");
+		concat_log = fopen((char *) "/var/www/jscdn.net/logs/concat.log", "a+");
 		if(concat_log == NULL){
 		    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Could not open concat log for appending");
 		}else{
