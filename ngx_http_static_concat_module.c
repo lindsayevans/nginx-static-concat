@@ -73,7 +73,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
     u_char *requested_path;
     ngx_open_file_info_t of;
 
-    ngx_buf_t    *b;
+    //ngx_buf_t    *b;
     ngx_chain_t   out;
 
 
@@ -171,7 +171,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 		files[ii] = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(u_char *));    
 		jj = 0;
 		if(ii > max_files){
-		    ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "Maximum number of %i fiels reached: %V", max_files, &r->uri);
+		    ngx_log_error(NGX_LOG_WARN, r->connection->log, 0, "Maximum number of %i files reached: %V", max_files, &r->uri);
 		    break;
 		}
 		continue;
@@ -189,33 +189,62 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 	for(i = 0; i < ii; i++){
 	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Processing file: %i %V/%s", i, &clcf->root, (char *) files[i]);
-	    // TODO: skip file if not exist
 	    cmd.len = ngx_sprintf(cmd.data, "%s %V/%s", cmd.data, &clcf->root, files[i]) - cmd.data;
 	}
 	cmd.len = ngx_sprintf(cmd.data, "%s > %s", cmd.data, path.data) - cmd.data;
 
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Command: %s", cmd.data);
 
-	int ret;
+	//int ret = -1;
+	FILE *ret;
 /* 
  * Getting these errors - guessing they're permission based:
  * shell-init: error retrieving current directory: getcwd: cannot access parent directories: Permission denied
  * job-working-directory: error retrieving current directory: getcwd: cannot access parent directories: Permission denied
 */
-	ret = system((char *) cmd.data);
-	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Command returned: %i", ret);
+	//ret = system((char *) cmd.data);
+	ret = popen((char *) cmd.data, "r");
+	//ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Command returned: %i", ret);
 
 	free(files[ii]);
 
-	// TODO: write path.data to concat log - log file should be a config var
-	// TODO: write headers file (use macros so only if static headers module included)
+	// Subrequest for concatted file
+	if(ret){
 
-	// Or we just doa subrequest?
-	return ngx_http_subrequest(r, &r->uri, NULL /* args */, NULL /* callback */, NULL, 0 /* flags */);
+	    // Write requested path to concat log
+	    // TODO: probably should use built-in logging stuff for this
+	    // TODO: log file should be a config var
+	    //if(ngx_strlen(log_path) != 0){
+		ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Logging concatted file: %s", requested_path);
+
+		FILE* concat_log;
+		concat_log = fopen((char *) "/usr/local/nginx/logs/concat.log", "a+");
+		if(concat_log == NULL){
+		    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Could not open concat log for appending");
+		}else{
+		    fputs((char *) requested_path, concat_log);
+		    fputs("\n", concat_log);
+		    fclose(concat_log);
+		}
+	    //}
+
+	    free(requested_path);
+	    
+	    // TODO (v2): write headers file (use macros so only if static headers module included)
+
+	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "popen() succeeded, doing the subrequest thang");
+	    pclose(ret);
+	    return ngx_http_subrequest(r, &r->uri, NULL /* args */, NULL /* callback */, NULL, 0 /* flags */);
+	}else{
+	    free(requested_path);
+
+	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "popen() failed");
+	    return NGX_DECLINED;
+	}
 
     }
 
-    return ngx_http_output_filter(r, &out); // Do we ever get here?
+    return ngx_http_output_filter(r, &out); // Do we ever get here? yes - is disabled - return NGX_DECLINED?
 
 }
 
