@@ -184,7 +184,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
 	// sanitised or concat in code
 	ngx_str_t cmd;
-	cmd.data = ngx_pcalloc(r->pool, (3 + (1+ngx_strlen(&clcf->root))*ii + 3 + ngx_strlen(&r->uri)));
+	cmd.data = ngx_pcalloc(r->pool, (3 + (1 + ngx_strlen(&clcf->root)) * ii + 3 + ngx_strlen(&r->uri)));
 	cmd.len = ngx_sprintf(cmd.data, "cat") - cmd.data;
 
 	for(i = 0; i < ii; i++){
@@ -238,9 +238,15 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	}else{
 	    free(requested_path);
 
+<<<<<<< HEAD:ngx_http_static_concat_module.c
 	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "popen() failed");
 	    return NGX_DECLINED;
 	}
+=======
+	// Subrequest for cncatted file
+	// TODO: will this be a different URI if we skip non-existent? (bad idea, I think)
+	return ngx_http_subrequest(r, &r->uri, NULL /* args */, NULL /* callback */, NULL, 0 /* flags */);
+>>>>>>> 7b09f90fe9ba1524c940cb0cfe25a486d056fd3e:ngx_http_static_concat_module.c
 
     }
 
