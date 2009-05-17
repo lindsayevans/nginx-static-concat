@@ -21,8 +21,7 @@ Let's say you have /bacon & /chocolate already, now if somebody requests /bacon+
 
 TODO:
  - Test the living daylights out of it for security holes.
- - Logging what was concatenated when (so you can keep tabs & pre-concat in future).
+ - Configuration variable for log path
  - Support for extensions other than .js
  - The ability to turn it off (why you would want to is anyones guess).
- - Actually returning the file in the initial request.
  - All sorts of other crap. Look through the source if you're interested. 
