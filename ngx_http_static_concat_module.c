@@ -113,8 +113,18 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 	// Check for invalid characters in requested path
 	// TODO: any escaped chars?
-	if(ngx_strchr(requested_path, '/')){
-	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Invalid char found in requested path: %s at: %i", requested_path, ngx_strchr(requested_path, '/'));
+	// TODO: check for: "..", [^\.a-zA-Z0-9]+
+	// TODO: failing somewhere, debug:
+	ngx_int_t n;
+	ngx_regex_t *invalid_chars_regex;
+	ngx_str_t invalid_chars_pattern;
+	invalid_chars_pattern.data = ngx_pcalloc(r->pool, ngx_strlen("\\.\\.|[^\\.a-zA-Z0-9]+"));
+	invalid_chars_pattern.len = ngx_sprintf(invalid_chars_pattern.data, "\\.\\.|[^\\.a-zA-Z0-9]+") - invalid_chars_pattern.data;
+	invalid_chars_regex = ngx_regex_compile(&invalid_chars_pattern, NGX_REGEX_CASELESS, r->pool, NULL); // &err
+	n = ngx_regex_exec(invalid_chars_regex, (ngx_str_t *) requested_path, NULL, 0);
+	if (n != NGX_REGEX_NO_MATCHED) {
+	//if(ngx_strchr(requested_path, '/')){
+	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Invalid char found in requested path: %s", requested_path);
 	    return NGX_DECLINED;
 	}
 	//free(requested_path);
