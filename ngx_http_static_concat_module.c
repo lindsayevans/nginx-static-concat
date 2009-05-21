@@ -121,16 +121,25 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	err.len = NGX_MAX_CONF_ERRSTR;
 	err.data = errstr;
 
-	invalid_chars_pattern.data = ngx_pcalloc(r->pool, ngx_strlen("\\.\\.|[^\\.\\+a-zA-Z0-9]+"));
-	invalid_chars_pattern.len = ngx_sprintf(invalid_chars_pattern.data, "\\.\\.|[^\\.\\+a-zA-Z0-9]+") - invalid_chars_pattern.data;
+	// Basic: "[^\\.+a-z0-9]+"
+	// Include '..': "\\.\\.|[^\\.+a-z0-9]+"
+	invalid_chars_pattern.data = ngx_pcalloc(r->pool, ngx_strlen("js"));
+	invalid_chars_pattern.len = ngx_sprintf(invalid_chars_pattern.data, "js") - invalid_chars_pattern.data;
+	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "invalid_chars_pattern: %V", &invalid_chars_pattern);
+
 	invalid_chars_regex = ngx_regex_compile(&invalid_chars_pattern, NGX_REGEX_CASELESS, r->pool, &err);
-	n = ngx_regex_exec(invalid_chars_regex, (ngx_str_t *) requested_path, NULL, 0);
+	if(invalid_chars_regex == NULL){
+	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "invalid_chars_regex is NULL: %V", &err);
+/*
+invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflow in "jsERCP3" at "",PI?Rt ...
+*/
+	}
+	n = ngx_regex_exec(invalid_chars_regex, (ngx_str_t *) &requested_path, NULL, 0);
 	if (n != NGX_REGEX_NO_MATCHED) {
 	//if(ngx_strchr(requested_path, '/')){
-	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "Invalid char found in requested path: %s", requested_path);
+	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "Invalid char found in requested path: %s @ %i", requested_path, n);
 	    return NGX_DECLINED;
 	}
-ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Regex debug: 7");
 	//free(requested_path);
 
 	// Check if file exists etc.
