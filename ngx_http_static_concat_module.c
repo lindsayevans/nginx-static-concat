@@ -68,41 +68,28 @@ ngx_module_t  ngx_http_static_concat_module = {
 static ngx_int_t
 ngx_http_static_concat_handler(ngx_http_request_t *r)
 {
-    size_t root;
-    ngx_str_t path;
-    u_char *requested_path;
-    ngx_open_file_info_t of;
+    size_t		    root;
+    ngx_str_t		    path;
+    u_char		    *requested_path;
+    ngx_open_file_info_t    of;
+    //ngx_chain_t		    out;
 
-    //ngx_buf_t    *b;
-    ngx_chain_t   out;
-
-
-    ngx_http_static_concat_loc_conf_t  *cglcf;
+    ngx_http_static_concat_loc_conf_t	*cglcf;
+    ngx_http_core_loc_conf_t		*clcf;
     cglcf = ngx_http_get_module_loc_conf(r, ngx_http_static_concat_module);
-
-    ngx_http_core_loc_conf_t  *clcf;
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
     if(cglcf->enable){
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Concat enabled");
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Requested URI: %V", &r->uri);
 	
-
-// if file not found, has +
-//  loop over requested files
-//   if one doesnt exist, break out & return???
-//   add name (plus .js if not there) to files array
-//  loop over files array
-//   concat to new file (name = requested file)
-
-
-	// Check if URI contains + char
+	/* Check if URI contains + char */
 	if(ngx_strchr(r->uri.data, '+') == NULL){
 	    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Plus char not found in URI, returning");
 	    return NGX_DECLINED;
 	}
 
-	// Remove / from front of requested URI
+	/* Remove / from front of requested URI */
 	requested_path = (u_char *) malloc(ngx_strlen(r->uri.data)*sizeof(ngx_str_t));
 	size_t len = (size_t) r->uri.len;
 	size_t i;
@@ -111,8 +98,8 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	}
 	requested_path[i] = '\0';
 
-	// Check for invalid characters in requested path
-	// TODO: any escaped chars?
+	/* Check for invalid characters in requested path */
+/*
 	ngx_int_t n;
 	ngx_regex_t *invalid_chars_regex;
 	ngx_str_t invalid_chars_pattern;
@@ -121,18 +108,18 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	err.len = NGX_MAX_CONF_ERRSTR;
 	err.data = errstr;
 
-	// Basic: "[^\\.+a-z0-9]+"
-	// Include '..': "\\.\\.|[^\\.+a-z0-9]+"
-	invalid_chars_pattern.data = ngx_pcalloc(r->pool, ngx_strlen("js"));
-	invalid_chars_pattern.len = ngx_sprintf(invalid_chars_pattern.data, "js") - invalid_chars_pattern.data;
+	// TODO: make regex a config var
+	// Basic: "[^\\.+\\-a-z0-9]+"
+	// Include '..': "\\.\\.|[^\\.+\\-a-z0-9]+"
+	invalid_chars_pattern.data = ngx_pcalloc(r->pool, 100); // TODO: use proper size
+	invalid_chars_pattern.len = ngx_sprintf(invalid_chars_pattern.data, "X") - invalid_chars_pattern.data;
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "invalid_chars_pattern: %V", &invalid_chars_pattern);
-
+	
 	invalid_chars_regex = ngx_regex_compile(&invalid_chars_pattern, NGX_REGEX_CASELESS, r->pool, &err);
 	if(invalid_chars_regex == NULL){
 	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "invalid_chars_regex is NULL: %V", &err);
-/*
-invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflow in "jsERCP3" at "",PI?Rt ...
-*/
+//invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflow in "jsERCP3" at "",PI?Rt ...
+// caused by ngx_pcalloc() on invalid_chars_pattern.data being wrong
 	}
 	n = ngx_regex_exec(invalid_chars_regex, (ngx_str_t *) &requested_path, NULL, 0);
 	if (n != NGX_REGEX_NO_MATCHED) {
@@ -140,9 +127,15 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
 	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "Invalid char found in requested path: %s @ %i", requested_path, n);
 	    return NGX_DECLINED;
 	}
-	//free(requested_path);
+*/
 
-	// Check if file exists etc.
+	if(strstr((const char *) requested_path, "..") != NULL || strstr((const char *) requested_path, "/") != NULL){
+	    ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0, "Invalid char found in requested path: %s", requested_path);
+	    return NGX_DECLINED;
+	}
+
+
+	/* Check if file exists etc. */
 	// TODO: probably more efficient to use stat() or access() here
 	ngx_http_map_uri_to_path(r, &path, &root, 0);
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Requested file: %s", path.data);
@@ -167,7 +160,7 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
         //    return NGX_DECLINED;
 	//}
 
-	// Split requested URI into component file names & attach '.js' if needed
+	/* Split requested URI into component file names & attach '.js' if needed */
 	u_int max_files = 10; // max files to concat, TODO: make config var or something
 	u_char *files[max_files];
 	u_int ii = 0, jj = 0;
@@ -205,7 +198,7 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
 	    jj++;
 	}
 
-	// Loop over requested files & add to cat command
+	/* Loop over requested files & add to cat command */
 	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
 	// sanitised or concat in code
 	ngx_str_t cmd;
@@ -223,7 +216,7 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
 	//int ret = -1;
 	FILE *ret;
 /* 
- * Getting these errors - guessing they're permission based:
+ * Getting these errors in dev - guessing they're permission based:
  * shell-init: error retrieving current directory: getcwd: cannot access parent directories: Permission denied
  * job-working-directory: error retrieving current directory: getcwd: cannot access parent directories: Permission denied
 */
@@ -233,10 +226,10 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
 
 	free(files[ii]);
 
-	// Subrequest for concatted file
+	/* Subrequest for concatted file */
 	if(ret){
 
-	    // Write requested path to concat log
+	    /* Write requested path to concat log */
 	    // TODO: probably should use built-in logging stuff for this
 	    // TODO: log file should be a config var
 	    //if(ngx_strlen(log_path) != 0){
@@ -269,7 +262,8 @@ invalid_chars_regex is NULL: pcre_compile() failed: internal error: code overflo
 
     }
 
-    return ngx_http_output_filter(r, &out); // Do we ever get here? yes - is disabled - return NGX_DECLINED?
+    return NGX_DECLINED;
+    //return ngx_http_output_filter(r, &out); // Do we ever get here? yes - is disabled - return NGX_DECLINED?
 
 }
 
