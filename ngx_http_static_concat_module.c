@@ -72,7 +72,6 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
     ngx_str_t		    path;
     u_char		    *requested_path;
     ngx_open_file_info_t    of;
-    //ngx_chain_t		    out;
 
     ngx_http_static_concat_loc_conf_t	*cglcf;
     ngx_http_core_loc_conf_t		*clcf;
@@ -170,8 +169,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	    if(i == r->uri.len || r->uri.data[i] == '+'){
 
 		// Append ".js" if not there
-		// TODO: this is JSCDN specific, need to make a config var or something - work out from last three chars of URI?
-		// TODO: this is causing bugs, fix
+		// TODO: this is JSCDN specific, need to make a config var or something - or work out from last three chars of URI?
 		if(!(
 		    files[ii][jj-3] == '.' &&
 		    files[ii][jj-2] == 'j' &&
@@ -263,7 +261,6 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
     }
 
     return NGX_DECLINED;
-    //return ngx_http_output_filter(r, &out); // Do we ever get here? yes - is disabled - return NGX_DECLINED?
 
 }
 
