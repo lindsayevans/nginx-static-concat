@@ -10,25 +10,27 @@
 #include <sys/stat.h>
 
 
-static char* ngx_http_static_concat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static ngx_int_t ngx_http_static_concat_preconf(ngx_conf_t *cf);
-static ngx_int_t ngx_http_static_concat_postconf(ngx_conf_t *cf);
-
+static ngx_int_t ngx_http_static_concat_init(ngx_conf_t *cf);
 static void* ngx_http_static_concat_create_loc_conf(ngx_conf_t *cf);
-
-static char* ngx_http_static_concat_merge_loc_conf(ngx_conf_t *cf,
-    void *parent, void *child);
+static char* ngx_http_static_concat_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
 typedef struct {
-    ngx_flag_t  enable;
+    ngx_flag_t	enable;
+    ngx_str_t	log_path;
 } ngx_http_static_concat_loc_conf_t;
 
 static ngx_command_t  ngx_http_static_concat_commands[] = {
     { ngx_string("static_concat"),
-      NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
-      ngx_http_static_concat,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_FLAG,
+      ngx_conf_set_flag_slot,
       NGX_HTTP_LOC_CONF_OFFSET,
-      0,
+      offsetof(ngx_http_static_concat_loc_conf_t, enable),
+      NULL },
+    { ngx_string("static_concat_log"),
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+      ngx_conf_set_str_slot,
+      NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_static_concat_loc_conf_t, log_path),
       NULL },
       ngx_null_command
 };
@@ -36,7 +38,7 @@ static ngx_command_t  ngx_http_static_concat_commands[] = {
 
 static ngx_http_module_t  ngx_http_static_concat_module_ctx = {
     NULL,			    /* preconfiguration */
-    NULL,			    /* postconfiguration */
+    ngx_http_static_concat_init,    /* postconfiguration */
 
     NULL,                          /* create main configuration */
     NULL,                          /* init main configuration */
@@ -135,7 +137,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 
 	/* Check if file exists etc. */
-	// TODO: probably more efficient to use stat() or access() here
+	// TODO: probably more efficient to use stat() or access() here - or ngx_is_file()
 	ngx_http_map_uri_to_path(r, &path, &root, 0);
 	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Requested file: %s", path.data);
 
@@ -160,6 +162,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	//}
 
 	/* Split requested URI into component file names & attach '.js' if needed */
+	// TODO (v2): advanced merging
 	u_int max_files = 10; // max files to concat, TODO: make config var or something
 	u_char *files[max_files];
 	u_int ii = 0, jj = 0;
@@ -199,6 +202,7 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 	/* Loop over requested files & add to cat command */
 	// TODO: this is a potential security problem - need to either make absolutely sure requested files are 
 	// sanitised or concat in code
+	// FIXME: subrequest is running before command has finished concatting, probably need to concat in code & output
 	ngx_str_t cmd;
 	cmd.data = ngx_pcalloc(r->pool, (3 + (1 + ngx_strlen(&clcf->root)) * ii + 3 + ngx_strlen(&r->uri)));
 	cmd.len = ngx_sprintf(cmd.data, "cat") - cmd.data;
@@ -229,20 +233,19 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 	    /* Write requested path to concat log */
 	    // TODO: probably should use built-in logging stuff for this
-	    // TODO: log file should be a config var
-	    //if(ngx_strlen(log_path) != 0){
+	    if(ngx_strlen(&cglcf->log_path) != 0){
 		ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Logging concatted file: %s", requested_path);
-
-		FILE* concat_log;
-		concat_log = fopen((char *) "/var/www/jscdn.net/logs/concat.log", "a+");
-		if(concat_log == NULL){
-		    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Could not open concat log for appending");
+		ngx_fd_t    fd;
+		fd = ngx_open_file(&cglcf->log_path, NGX_FILE_APPEND, NGX_FILE_CREATE_OR_OPEN, NGX_FILE_DEFAULT_ACCESS);
+		if(fd == NGX_INVALID_FILE){
+		    char *lErrString	= strerror (ngx_errno);
+		    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "Could not open concat log for appending: %V, %i (%s)", &cglcf->log_path, ngx_errno, lErrString);
 		}else{
-		    fputs((char *) requested_path, concat_log);
-		    fputs("\n", concat_log);
-		    fclose(concat_log);
+		    ngx_write_fd(fd, requested_path, ngx_strlen(requested_path));
+		    ngx_write_fd(fd, "\n", ngx_strlen("\n"));
 		}
-	    //}
+		ngx_close_file(fd);
+	    }
 
 	    free(requested_path);
 	    
@@ -264,21 +267,21 @@ ngx_http_static_concat_handler(ngx_http_request_t *r)
 
 }
 
-static char *
-ngx_http_static_concat(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+static ngx_int_t
+ngx_http_static_concat_init(ngx_conf_t *cf)
 {
-    ngx_http_core_loc_conf_t  *clcf;
-    ngx_http_static_concat_loc_conf_t *cglcf = conf;
+    ngx_http_handler_pt        *h;
+    ngx_http_core_main_conf_t  *cmcf;
 
+    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
 
-    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-    clcf->handler = ngx_http_static_concat_handler;
+    h = ngx_array_push(&cmcf->phases[NGX_HTTP_CONTENT_PHASE].handlers);
+    if (h == NULL) {
+	return NGX_ERROR;
+    }
+    *h = ngx_http_static_concat_handler;
 
-    // TODO: disable if 'off'
-    // see gzip module for example
-    cglcf->enable = 1;
-
-    return NGX_CONF_OK;
+    return NGX_OK;
 }
 
 static void *
@@ -291,6 +294,7 @@ ngx_http_static_concat_create_loc_conf(ngx_conf_t *cf)
         return NGX_CONF_ERROR;
     }
     conf->enable = NGX_CONF_UNSET;
+    //conf->log_path = NGX_CONF_UNSET; // set by ngx_pcalloc()
     return conf;
 }
 
@@ -301,6 +305,7 @@ ngx_http_static_concat_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     ngx_http_static_concat_loc_conf_t *conf = child;
 
     ngx_conf_merge_value(conf->enable, prev->enable, 0);
+    ngx_conf_merge_str_value(conf->log_path, prev->log_path, "");
 
     return NGX_CONF_OK;
 }
